@@ -1,0 +1,26 @@
+[[source]]
+url = "https://pypi.org/simple"
+verify_ssl = true
+name = "pypi"
+
+[packages]
+flask = "*"
+flask-sqlalchemy = "*"
+flask-migrate = "*"
+marshmallow = "*"
+flask-marshmallow = "*"
+flask-restful = "*"
+flask-socketio = "*"
+flask-jwt-extended = "*"
+flask-bcrypt = "*"
+flask-cors = "*"
+psycopg2-binary = "*"
+python-dotenv = "*"
+sqlalchemy-serializer = "*"
+marshmallow-sqlalchemy = "*"
+flask-apscheduler = "*"
+
+[dev-packages]
+
+[requires]
+python_version = "3.14"

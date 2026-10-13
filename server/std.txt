@@ -1,0 +1,254 @@
+from flask import request, make_response
+from flask_restful import Resource
+from schemas.student_dashboard_schema import student_dashboard_schema
+from services.student_dashboard_service import get_student_dashboard_data
+from services.decorators import role_required
+from flask_jwt_extended import get_jwt_identity
+from app import api
+
+class StudentDashboard(Resource):
+    @role_required("student")
+    def get(self):
+        print(get_jwt_identity())
+        student_id = get_jwt_identity()
+        return get_student_dashboard_data(student_id)
+    
+api.add_resource(StudentDashboard, "/dashboard/student")
+
+# services/student_dashboard_service.py
+
+from datetime import datetime, timezone, timedelta
+from sqlalchemy import select, func, desc
+from sqlalchemy.exc import SQLAlchemyError
+from extensions import db
+from models.user import User
+from models.class_model import SchoolClass
+from models.subject import Subject
+from models.class_subject import ClassSubject
+from models.resource import Resource
+from models.download import Download
+from models.resource_view import ResourceView
+from schemas.student_dashboard_schema import student_dashboard_schema
+from models.student_class import StudentClass  # <-- Importing your new model!
+import logging
+
+logger = logging.getLogger(__name__)
+
+def get_student_dashboard_data(student_user_id: int):
+    try:
+        # 1. Fetch Student Context
+        student = db.session.get(User, student_user_id)
+        if not student:
+            return {"error": "Student record not found."}, 404
+        
+        # --- DYNAMIC CLASS RESOLUTION USING STUDENT_CLASS ---
+        # Query the student's primary/first active class assignment
+        student_class_record = db.session.scalar(
+            select(StudentClass)
+            .where(StudentClass.student_id == student_user_id)
+            .limit(1)
+        )
+        
+        if not student_class_record:
+            return {
+                "error": "Access Denied. You have not been assigned to a class. Contact administration."
+            }, 403
+
+        class_id = student_class_record.class_id
+        school_class = student_class_record.school_class
+        class_name = school_class.class_name if school_class else "Unknown Class"
+        # ----------------------------------------------------
+
+        # 2. Compute Metric Card Analytics (Filtered by dynamic class_id)
+        total_courses_count = db.session.scalar(
+            select(func.count(ClassSubject.id))
+            .where(ClassSubject.class_id == class_id)
+        ) or 0
+
+        one_week_ago = datetime.now(timezone.utc) - timedelta(days=7)
+        new_files_count = db.session.scalar(
+            select(func.count(Resource.id))
+            .where(Resource.class_id == class_id)
+            .where(Resource.created_at >= one_week_ago)
+            .where(Resource.status == 'ACTIVE')
+        ) or 0
+
+        # Completed reads = Combined distinct active views and downloads for this user
+        completed_reads_count = db.session.scalar(
+            select(func.count(ResourceView.id))
+            .where(ResourceView.user_id == student_user_id)
+        ) or 0
+
+        # 3. Fetch Subjects Binder (Dynamic to resolved class_id)
+        subjects_query = (
+            db.session.execute(
+                select(
+                    Subject.id,
+                    Subject.subject_name,
+                    Subject.subject_code,
+                    func.count(Resource.id).label("file_count")
+                )
+                .join(ClassSubject, ClassSubject.subject_id == Subject.id)
+                .outerjoin(
+                    Resource, 
+                    (Resource.subject_id == Subject.id) & 
+                    (Resource.class_id == class_id) & 
+                    (Resource.status == 'ACTIVE')
+                )
+                .where(ClassSubject.class_id == class_id)
+                .group_by(Subject.id)
+            ).all()
+        )
+
+        subject_binder = []
+        for row in subjects_query:
+            subject_binder.append({
+                "id": row.id,
+                "subject_name": row.subject_name,
+                "subject_code": row.subject_code or f"SUBJ-{row.id}",
+                "file_count": row.file_count
+            })
+
+        # 4. Fetch Fresh Drops (Dynamic to resolved class_id)
+        fresh_drops_query = db.session.scalars(
+            select(Resource)
+            .where(Resource.class_id == class_id)
+            .where(Resource.status == 'ACTIVE')
+            .order_by(desc(Resource.created_at))
+            .limit(5)
+        ).all()
+
+        fresh_drops = []
+        for res in fresh_drops_query:
+            # Format time-ago string cleanly
+            time_delta = datetime.now(timezone.utc) - res.created_at.replace(tzinfo=timezone.utc)
+            if time_delta.days > 0:
+                time_str = f"{time_delta.days} days ago" if time_delta.days > 1 else "Yesterday"
+            else:
+                hours = time_delta.seconds // 3600
+                time_str = f"{hours} hours ago" if hours > 0 else "Just now"
+
+            fresh_drops.append({
+                "id": res.id,
+                "title": res.title,  # Using the corrected 'title' field from your schema!
+                "resource_type": res.resource_type,
+                "author_name": f"Prof. {res.uploader.last_name}" if res.uploader else "System Vault",
+                "time_ago": time_str
+            })
+
+        # 5. User Activity Logs
+        recent_views = db.session.scalars(
+            select(ResourceView)
+            .where(ResourceView.user_id == student_user_id)
+            .order_by(desc(ResourceView.viewed_at))
+            .limit(5)
+        ).all()
+
+        recent_downloads = db.session.scalars(
+            select(Download)
+            .where(Download.user_id == student_user_id)
+            .order_by(desc(Download.downloaded_at))
+            .limit(5)
+        ).all()
+
+        activity_logs = []
+        for r_view in recent_views:
+            activity_logs.append({
+                "id": f"view-{r_view.id}",
+                "title": r_view.resource.title if r_view.resource else "Deleted Resource",
+                "action": "Opened and read",
+                "timestamp": r_view.viewed_at.strftime("%Y-%m-%d at %I:%M %p"),
+                "activity_type": "VIEW"
+            })
+
+        for r_dl in recent_downloads:
+            activity_logs.append({
+                "id": f"dl-{r_dl.id}",
+                "title": r_dl.resource.title if r_dl.resource else "Deleted Resource",
+                "action": "Downloaded to device",
+                "timestamp": r_dl.downloaded_at.strftime("%Y-%m-%d at %I:%M %p"),
+                "activity_type": "DOWNLOAD"
+            })
+
+        # Sort combined activity lists by timestamp
+        activity_logs = sorted(activity_logs, key=lambda x: x["timestamp"], reverse=True)[:5]
+
+        # Construct unified API response payload
+        payload = {
+            "student_context": {
+                "className": class_name,
+                "totalCourses": total_courses_count,
+                "newFilesThisWeek": new_files_count,
+                "completedReads": completed_reads_count
+            },
+            "subject_binder": subject_binder,
+            "fresh_drops": fresh_drops,
+            "user_activity_logs": activity_logs
+        }
+                # 3. Serialize through Marshmallow validator prior to dispatching
+        
+        
+        return student_dashboard_schema.dump(payload), 200
+
+    except SQLAlchemyError as e:
+        db.session.rollback()
+        logger.error(f"Error compiling student dashboard metrics: {str(e)}")
+        return {"error": "An unexpected server error occurred during compilation."}, 500
+
+
+from extensions import ma
+from marshmallow import Schema, fields
+
+# Lightweight sub-schemas to output only what the UI renders
+class DashboardSubjectSchema(Schema):
+    id = fields.Int(dump_only=True)
+    subject_name = fields.Str(dump_only=True, attribute="subject_name")
+    subject_code = fields.Str(dump_only=True, attribute="subject_code")
+    file_count = fields.Int(dump_only=True)
+
+
+class DashboardResourceSchema(Schema):
+    id = fields.Int(dump_only=True)
+    title = fields.Str(dump_only=True)
+    resource_type = fields.Str(dump_only=True)
+    author_name = fields.Str(dump_only=True)
+    time_ago = fields.Str(dump_only=True)
+
+
+class DashboardActivitySchema(Schema):
+    id = fields.Str(dump_only=True)
+    title = fields.Str(dump_only=True)
+    action = fields.Str(dump_only=True)  # "Opened and read" or "Downloaded"
+    timestamp = fields.Str(dump_only=True)
+    activity_type = fields.Str(dump_only=True)  # "VIEW" or "DOWNLOAD"
+
+
+# Unified Schema returning the complete composite dashboard payload in one round-trip
+class StudentDashboardResponseSchema(Schema):
+    student_context = fields.Dict()
+    subject_binder = fields.List(fields.Nested(DashboardSubjectSchema))
+    fresh_drops = fields.List(fields.Nested(DashboardResourceSchema))
+    user_activity_logs = fields.List(fields.Nested(DashboardActivitySchema))
+
+
+student_dashboard_schema = StudentDashboardResponseSchema()
+
+
+
+"sam@sam-HP-Laptop-15-bs1xx:~/Desktop/peter/CRM_System/server$ pipenv run flask run
+Loading .env environment variables...
+ * Debug mode: off
+WARNING: This is a development server. Do not use it in a production deployment. Use a production WSGI server instead.
+ * Running on http://127.0.0.1:5000
+Press CTRL+C to quit
+/home/sam/snap/code/250/.local/share/virtualenvs/CRM_System-Xs3OOuXd/lib/python3.12/site-packages/jwt/api_jwt.py:147: InsecureKeyLengthWarning: The HMAC key is 13 bytes long, which is below the minimum recommended length of 32 bytes for SHA256. See RFC 7518 Section 3.2.
+  return self._jws.encode(
+127.0.0.1 - - [17/Jul/2026 17:07:57] "POST /login HTTP/1.1" 200 -
+/home/sam/snap/code/250/.local/share/virtualenvs/CRM_System-Xs3OOuXd/lib/python3.12/site-packages/jwt/api_jwt.py:368: InsecureKeyLengthWarning: The HMAC key is 13 bytes long, which is below the minimum recommended length of 32 bytes for SHA256. See RFC 7518 Section 3.2.
+  decoded = self.decode_complete(
+14
+127.0.0.1 - - [17/Jul/2026 17:07:57] "GET /dashboard/student HTTP/1.1" 403 -
+14
+127.0.0.1 - - [17/Jul/2026 17:07:58] "GET /dashboard/student HTTP/1.1" 403 -
+"
+

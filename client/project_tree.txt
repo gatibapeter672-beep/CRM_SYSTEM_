@@ -1,0 +1,306 @@
+/home/sam/Desktop/peter/CRM_System/client
+├── README.md
+├── index.html
+├── node_modules
+|  ├── @emnapi
+|  |  ├── core
+|  |  ├── runtime
+|  |  └── wasi-threads
+|  ├── @jridgewell
+|  |  ├── gen-mapping
+|  |  ├── remapping
+|  |  ├── resolve-uri
+|  |  ├── sourcemap-codec
+|  |  └── trace-mapping
+|  ├── @napi-rs
+|  |  └── wasm-runtime
+|  ├── @oxc-project
+|  |  └── types
+|  ├── @oxlint
+|  |  ├── binding-linux-x64-gnu
+|  |  └── binding-linux-x64-musl
+|  ├── @rolldown
+|  |  ├── binding-linux-x64-gnu
+|  |  ├── binding-linux-x64-musl
+|  |  └── pluginutils
+|  ├── @tailwindcss
+|  |  ├── node
+|  |  ├── oxide
+|  |  ├── oxide-linux-x64-gnu
+|  |  ├── oxide-linux-x64-musl
+|  |  └── vite
+|  ├── @tybys
+|  |  └── wasm-util
+|  ├── @types
+|  |  ├── react
+|  |  └── react-dom
+|  ├── @vitejs
+|  |  └── plugin-react
+|  ├── cookie
+|  |  ├── LICENSE
+|  |  ├── README.md
+|  |  ├── dist
+|  |  └── package.json
+|  ├── csstype
+|  |  ├── LICENSE
+|  |  ├── README.md
+|  |  ├── index.d.ts
+|  |  ├── index.js.flow
+|  |  └── package.json
+|  ├── detect-libc
+|  |  ├── LICENSE
+|  |  ├── README.md
+|  |  ├── index.d.ts
+|  |  ├── lib
+|  |  └── package.json
+|  ├── enhanced-resolve
+|  |  ├── LICENSE
+|  |  ├── README.md
+|  |  ├── lib
+|  |  ├── package.json
+|  |  └── types.d.ts
+|  ├── fdir
+|  |  ├── LICENSE
+|  |  ├── README.md
+|  |  ├── dist
+|  |  └── package.json
+|  ├── graceful-fs
+|  |  ├── LICENSE
+|  |  ├── README.md
+|  |  ├── clone.js
+|  |  ├── graceful-fs.js
+|  |  ├── legacy-streams.js
+|  |  ├── package.json
+|  |  └── polyfills.js
+|  ├── jiti
+|  |  ├── LICENSE
+|  |  ├── README.md
+|  |  ├── dist
+|  |  ├── lib
+|  |  └── package.json
+|  ├── lightningcss
+|  |  ├── LICENSE
+|  |  ├── README.md
+|  |  ├── node
+|  |  └── package.json
+|  ├── lightningcss-linux-x64-gnu
+|  |  ├── LICENSE
+|  |  ├── README.md
+|  |  ├── lightningcss.linux-x64-gnu.node
+|  |  └── package.json
+|  ├── lightningcss-linux-x64-musl
+|  |  ├── LICENSE
+|  |  ├── README.md
+|  |  ├── lightningcss.linux-x64-musl.node
+|  |  └── package.json
+|  ├── lucide-react
+|  |  ├── LICENSE
+|  |  ├── README.md
+|  |  ├── dist
+|  |  ├── dynamic.d.mts
+|  |  ├── dynamic.d.ts
+|  |  ├── dynamic.js
+|  |  ├── dynamic.mjs
+|  |  ├── dynamic.mjs.map
+|  |  ├── dynamicIconImports.d.mts
+|  |  ├── dynamicIconImports.d.ts
+|  |  ├── dynamicIconImports.mjs
+|  |  └── package.json
+|  ├── magic-string
+|  |  ├── LICENSE
+|  |  ├── README.md
+|  |  ├── dist
+|  |  └── package.json
+|  ├── nanoid
+|  |  ├── LICENSE
+|  |  ├── README.md
+|  |  ├── async
+|  |  ├── bin
+|  |  ├── index.browser.cjs
+|  |  ├── index.browser.js
+|  |  ├── index.cjs
+|  |  ├── index.d.cts
+|  |  ├── index.d.ts
+|  |  ├── index.js
+|  |  ├── nanoid.js
+|  |  ├── non-secure
+|  |  ├── package.json
+|  |  └── url-alphabet
+|  ├── oxlint
+|  |  ├── LICENSE
+|  |  ├── README.md
+|  |  ├── bin
+|  |  ├── configuration_schema.json
+|  |  ├── dist
+|  |  └── package.json
+|  ├── picocolors
+|  |  ├── LICENSE
+|  |  ├── README.md
+|  |  ├── package.json
+|  |  ├── picocolors.browser.js
+|  |  ├── picocolors.d.ts
+|  |  ├── picocolors.js
+|  |  └── types.d.ts
+|  ├── picomatch
+|  |  ├── LICENSE
+|  |  ├── README.md
+|  |  ├── index.js
+|  |  ├── lib
+|  |  ├── package.json
+|  |  └── posix.js
+|  ├── postcss
+|  |  ├── LICENSE
+|  |  ├── README.md
+|  |  ├── lib
+|  |  └── package.json
+|  ├── react
+|  |  ├── LICENSE
+|  |  ├── README.md
+|  |  ├── cjs
+|  |  ├── compiler-runtime.js
+|  |  ├── index.js
+|  |  ├── jsx-dev-runtime.js
+|  |  ├── jsx-dev-runtime.react-server.js
+|  |  ├── jsx-runtime.js
+|  |  ├── jsx-runtime.react-server.js
+|  |  ├── package.json
+|  |  └── react.react-server.js
+|  ├── react-dom
+|  |  ├── LICENSE
+|  |  ├── README.md
+|  |  ├── cjs
+|  |  ├── client.js
+|  |  ├── client.react-server.js
+|  |  ├── index.js
+|  |  ├── package.json
+|  |  ├── profiling.js
+|  |  ├── profiling.react-server.js
+|  |  ├── react-dom.react-server.js
+|  |  ├── server.browser.js
+|  |  ├── server.bun.js
+|  |  ├── server.edge.js
+|  |  ├── server.js
+|  |  ├── server.node.js
+|  |  ├── server.react-server.js
+|  |  ├── static.browser.js
+|  |  ├── static.edge.js
+|  |  ├── static.js
+|  |  ├── static.node.js
+|  |  ├── static.react-server.js
+|  |  └── test-utils.js
+|  ├── react-router
+|  |  ├── CHANGELOG.md
+|  |  ├── LICENSE.md
+|  |  ├── README.md
+|  |  ├── dist
+|  |  ├── docs
+|  |  └── package.json
+|  ├── react-router-dom
+|  |  ├── LICENSE.md
+|  |  ├── README.md
+|  |  ├── dist
+|  |  └── package.json
+|  ├── rolldown
+|  |  ├── LICENSE
+|  |  ├── README.md
+|  |  ├── bin
+|  |  ├── dist
+|  |  └── package.json
+|  ├── scheduler
+|  |  ├── LICENSE
+|  |  ├── README.md
+|  |  ├── cjs
+|  |  ├── index.js
+|  |  ├── index.native.js
+|  |  ├── package.json
+|  |  ├── unstable_mock.js
+|  |  └── unstable_post_task.js
+|  ├── set-cookie-parser
+|  |  ├── LICENSE
+|  |  ├── README.md
+|  |  ├── lib
+|  |  └── package.json
+|  ├── source-map-js
+|  |  ├── LICENSE
+|  |  ├── README.md
+|  |  ├── lib
+|  |  ├── package.json
+|  |  ├── source-map.d.ts
+|  |  └── source-map.js
+|  ├── tailwindcss
+|  |  ├── LICENSE
+|  |  ├── README.md
+|  |  ├── dist
+|  |  ├── index.css
+|  |  ├── package.json
+|  |  ├── preflight.css
+|  |  ├── theme.css
+|  |  └── utilities.css
+|  ├── tapable
+|  |  ├── LICENSE
+|  |  ├── README.md
+|  |  ├── lib
+|  |  ├── package.json
+|  |  └── tapable.d.ts
+|  ├── tinyglobby
+|  |  ├── LICENSE
+|  |  ├── README.md
+|  |  ├── dist
+|  |  └── package.json
+|  ├── tslib
+|  |  ├── CopyrightNotice.txt
+|  |  ├── LICENSE.txt
+|  |  ├── README.md
+|  |  ├── SECURITY.md
+|  |  ├── modules
+|  |  ├── package.json
+|  |  ├── tslib.d.ts
+|  |  ├── tslib.es6.html
+|  |  ├── tslib.es6.js
+|  |  ├── tslib.es6.mjs
+|  |  ├── tslib.html
+|  |  └── tslib.js
+|  └── vite
+|     ├── LICENSE.md
+|     ├── README.md
+|     ├── bin
+|     ├── client.d.ts
+|     ├── dist
+|     ├── misc
+|     ├── package.json
+|     └── types
+├── package-lock.json
+├── package.json
+├── public
+├── src
+|  ├── App.css
+|  ├── App.jsx
+|  ├── AppRoutes.jsx
+|  ├── assets
+|  |  ├── hero.png
+|  |  ├── react.svg
+|  |  └── vite.svg
+|  ├── components
+|  |  └── DashboardLayout.jsx
+|  ├── contex
+|  |  ├── AuthContext.jsx
+|  |  └── authUtils.js
+|  ├── hooks
+|  |  └── useAuth.js
+|  ├── index.css
+|  ├── layouts
+|  |  ├── ProtectedRoute.jsx
+|  |  └── PublicLayout.jsx
+|  ├── main.jsx
+|  └── views
+|     ├── LandingPage.jsx
+|     ├── LoginForm.jsx
+|     ├── RegisterForm.jsx
+|     ├── ResourceExplorer.jsx
+|     ├── TeacherRoster.jsx
+|     ├── Unauthorized.jsx
+|     └── peter.jsx
+└── vite.config.js
+
+directory: 108 file: 194
+

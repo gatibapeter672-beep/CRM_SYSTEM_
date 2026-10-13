@@ -1,0 +1,268 @@
+# server/schemas/adm_dashboard_analyticsSchema.py
+from app import ma
+
+class MaterialAnalyticsSchema(ma.Schema):
+    class Meta:
+        ordered = True
+
+    resource_id = ma.Integer(dump_only=True)
+    title = ma.String(dump_only=True)
+    download_count = ma.Integer(dump_only=True)
+    subject_name = ma.String(dump_only=True)
+    class_name = ma.String(dump_only=True)
+
+class CurriculumGapSchema(ma.Schema):
+    class Meta:
+        ordered = True
+
+    class_id = ma.Integer(dump_only=True)
+    class_name = ma.String(dump_only=True)
+    subject_id = ma.Integer(dump_only=True)
+    subject_name = ma.String(dump_only=True)
+    gap_type = ma.String(dump_only=True)  # e.g., "MISSING_NOTES", "UNLINKED_SUBJECT"
+
+class SecurityAuditSchema(ma.Schema):
+    class Meta:
+        ordered = True
+
+    user_id = ma.Integer(dump_only=True)
+    username = ma.String(dump_only=True)
+    email = ma.String(dump_only=True)
+    is_active = ma.Boolean(dump_only=True)
+    last_login = ma.DateTime(format="%Y-%m-%d %H:%M:%S", dump_only=True)
+
+
+
+material_analytics_schema = MaterialAnalyticsSchema(many=True)
+curriculum_gap_schema = CurriculumGapSchema(many=True)
+security_audit_schema = SecurityAuditSchema(many=True)
+
+#there was a point in my service i got tired and just put things that should be in schema and just wrote them there i need real full senior engineer coz am publishing this 
+# server/services/adm_dashboard_service.py
+from app import db
+from models import Resource, Download, SchoolClass, Subject, ClassSubject, User,Role,TokenBlocklist,Tag,ResourceTag
+from server.schemas.adm_dashboard_analyticsSchema import (
+    material_analytics_schema, 
+    curriculum_gap_schema, 
+    security_audit_schema
+)
+from flask import make_response
+from sqlalchemy import select, func, desc
+from sqlalchemy.exc import SQLAlchemyError
+import logging
+
+logger = logging.getLogger(__name__)
+
+def get_dashboard_overview_service():
+    try:
+        from models import Role, TokenBlocklist
+
+        teachers_count = db.session.scalar(
+            select(func.count(User.id))
+            .join(Role)
+            .where(Role.name == 'teacher', User.is_active == True)
+        )
+
+        students_count = db.session.scalar(
+            select(func.count(User.id))
+            .join(Role)
+            .where(Role.name == 'student', User.is_active == True)
+        )
+
+        blocked_tokens = db.session.scalar(
+            select(func.count(TokenBlocklist.id))
+        )
+
+        return make_response({
+            "teachers": teachers_count,
+            "students": students_count,
+            "system_health": {
+                "blocked_tokens": blocked_tokens,
+                "status": "OK" if blocked_tokens < 10 else "WARNING"
+            }
+        }, 200)
+
+    except SQLAlchemyError as e:
+        logger.error(f"Overview error: {str(e)}")
+        return {"error": "Failed to load dashboard overview"}, 500
+
+
+def get_top_trending_materials_service():
+    try:
+        # Complex join measuring resource performance based on download streams
+        stmt = (
+            select(
+                Resource.id.label('resource_id'),
+                Resource.title.label('title'),
+                func.count(Download.id).label('download_count'),
+                Subject.subject_name.label('subject_name'),
+                SchoolClass.class_name.label('class_name')
+            )
+            .join(Download, Resource.id == Download.resource_id)
+            .join(Subject, Resource.subject_id == Subject.id)
+            .join(SchoolClass, Resource.class_id == SchoolClass.id)
+            .group_by(Resource.id, Subject.subject_name, SchoolClass.class_name)
+            .order_by(desc('download_count'))
+            .limit(5)
+        )
+        results = db.session.execute(stmt).all()
+        return make_response(material_analytics_schema.dump(results), 200)
+    except SQLAlchemyError as e:
+        logger.error(f"Database error in get_top_trending_materials_service: {str(e)}")
+        return {"error": "An unexpected error occurred while compiling analytics."}, 500
+
+def get_curriculum_gaps_service():
+    try:
+        # Detect classes linked to subjects that don't have any uploaded resources of type 'NOTE'
+        notes_subquery = (
+            select(Resource.class_id, Resource.subject_id)
+            .where(Resource.resource_type == 'NOTE')
+            .subquery()
+        )
+
+        stmt = (
+            select(
+                SchoolClass.id.label('class_id'),
+                SchoolClass.class_name.label('class_name'),
+                Subject.id.label('subject_id'),
+                Subject.subject_name.label('subject_name'),
+                func.coalesce("MISSING_NOTES").label('gap_type')
+            )
+            .join(ClassSubject, SchoolClass.id == ClassSubject.class_id)
+            .join(Subject, ClassSubject.subject_id == Subject.id)
+            .outerjoin(
+                notes_subquery,
+                (SchoolClass.id == notes_subquery.c.class_id) & (Subject.id == notes_subquery.c.subject_id)
+            )
+            .where(notes_subquery.c.class_id == None)
+        )
+        unlinked_stmt = (
+            select(
+                Subject.id.label('subject_id'),
+                Subject.subject_name.label('subject_name'),
+                func.null().label('class_id'),
+                func.null().label('class_name'),
+                func.coalesce("UNLINKED_SUBJECT").label('gap_type')
+            )
+            .outerjoin(ClassSubject, Subject.id==ClassSubject.subject_id)
+            .where(ClassSubject.subject_id==None)
+        )
+        unlinked_results = db.session.execute(unlinked_stmt).all()
+
+        
+        resultss = db.session.execute(stmt).all()
+        results = list(resultss) + list(unlinked_results)
+
+        return make_response(curriculum_gap_schema.dump(results), 200)
+    except SQLAlchemyError as e:
+        logger.error(f"Database error in get_curriculum_gaps_service: {str(e)}")
+        return {"error": "An unexpected error occurred while analyzing curriculum gaps."}, 500
+
+def get_security_audit_service():
+    try:
+        inactive_users = db.session.scalars(
+            select(User)
+            .where(User.is_active == False)
+            .order_by(desc(User.id))
+        ).all()
+
+        blocked_tokens = db.session.execute(
+            select(
+                TokenBlocklist.user_id,
+                TokenBlocklist.jti,
+                TokenBlocklist.created_at
+            )
+            .order_by(desc(TokenBlocklist.created_at))
+            .limit(10)
+        ).all()
+
+        return make_response({
+            "inactive_users": security_audit_schema.dump(inactive_users),
+            "token_events": [
+                {
+                    "user_id": t.user_id,
+                    "jti": t.jti,
+                    "timestamp": t.created_at
+                }
+                for t in blocked_tokens
+            ]
+        }, 200)
+
+    except SQLAlchemyError as e:
+        logger.error(f"Security audit error: {str(e)}")
+        return {"error": "Security audit failed"}, 500
+
+
+def get_tag_cloud_service():
+    try:
+        stmt = (
+            select(
+                Tag.id.label('tag_id'),
+                Tag.name.label('tag_name'),
+                func.count(ResourceTag.resource_id).label('usage_count')
+            )
+            .join(ResourceTag, Tag.id == ResourceTag.tag_id)
+            .group_by(Tag.id)
+            .order_by(desc('usage_count'))
+        )
+
+        results = db.session.execute(stmt).all()
+
+        return make_response([
+            {
+                "tag_id": r.tag_id,
+                "tag_name": r.tag_name,
+                "usage_count": r.usage_count
+            }
+            for r in results
+        ], 200)
+
+    except SQLAlchemyError as e:
+        logger.error(f"Tag cloud error: {str(e)}")
+        return {"error": "Failed to load tag cloud"}, 500
+
+# server/routes/adm_dashboard_routes.py
+from flask_restful import Resource
+from app import api
+from services.decorators import role_required
+from services.adm_dashboard_service import (
+    get_top_trending_materials_service,
+    get_curriculum_gaps_service,
+    get_security_audit_service,
+    get_dashboard_overview_service,
+    get_tag_cloud_service
+)
+
+class DashboardOverview(Resource):
+    @role_required('admin')
+    def get(self):
+        return get_dashboard_overview_service()
+
+class AnalyticsTrending(Resource):
+    @role_required('admin')
+    def get(self):
+        return get_top_trending_materials_service()
+
+class CurriculumGaps(Resource):
+    @role_required('admin')
+    def get(self):
+        return get_curriculum_gaps_service()
+
+class TagCloud(Resource):
+    @role_required('admin')
+    def get(self):
+        return get_tag_cloud_service()
+
+
+
+class SecurityAudits(Resource):
+    @role_required('admin')
+    def get(self):
+        return get_security_audit_service()
+
+# Clean Route Registrations for the Frontend Dashboard Streams
+api.add_resource(AnalyticsTrending, '/dashboard/analytics/trending', endpoint='dashboard_trending')
+api.add_resource(CurriculumGaps, '/dashboard/curriculum/gaps', endpoint='dashboard_gaps')
+api.add_resource(SecurityAudits, '/dashboard/security/audits', endpoint='dashboard_audits')
+api.add_resource(TagCloud, '/dashboard/tags/cloud', endpoint='dashboard_tags')
+api.add_resource(DashboardOverview, '/dashboard/overview', endpoint='dashboard_overview')

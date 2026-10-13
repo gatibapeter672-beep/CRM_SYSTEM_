@@ -1,0 +1,450 @@
+# server/routes/auth_routes.py
+
+from flask import  make_response
+from flask_restful import Resource
+from flask import request
+from app import api
+from services.auth_reg_service import register_user_service
+from services.auth_service import login_user_service
+
+
+class Index(Resource):
+    def get(self):
+        response_dict = {
+            'registration':'welcome to the registration restful api'
+        }
+
+        response =make_response(
+            response_dict,
+            200,
+        )
+        return response
+
+api.add_resource(Index, '/')
+
+class Login(Resource):
+    def post(self):
+        data = request.get_json()
+        return login_user_service(data)
+
+class Registration(Resource):
+    def post(self):
+        data = request.get_json()
+        return register_user_service(data)
+     
+
+
+api.add_resource(Login, '/login',endpoint='login')
+api.add_resource(Registration, '/register',endpoint='registration')
+
+import os
+from dotenv import load_dotenv
+from datetime import timedelta
+load_dotenv()
+
+class Config:
+    SQLALCHEMY_DATABASE_URI = os.environ.get('DATABASE_URI')
+    SQLALCHEMY_TRACK_MODIFICATIONS = False
+    JWT_SECRET_KEY = os.getenv('JWT_SECRET_KEY', 'super-secret')
+
+    # 🚀 PRODUCTION SECURITY COOKIE MATRIX
+    JWT_TOKEN_LOCATION = ['cookies']
+    JWT_ACCESS_COOKIE_PATH = '/api/'      # Only send access tokens to API paths
+    JWT_REFRESH_COOKIE_PATH = '/api/refresh' # Only send refresh tokens to refresh endpoint
+    JWT_COOKIE_CSRF_PROTECT = False       # Set to True later when adding CSRF tokens
+    JWT_COOKIE_HTTPONLY = True            # 🔒 Prevents JavaScript from reading the tokens
+    JWT_COOKIE_SECURE = False             # 💻 Set to True in actual live production HTTPS environments
+    JWT_ACCESS_TOKEN_EXPIRES = timedelta(minutes=15) # Short-lived access
+    JWT_REFRESH_TOKEN_EXPIRES = timedelta(days=7)    # Long-lived renewal
+
+# extensions.py
+from flask_sqlalchemy import SQLAlchemy
+from flask_marshmallow import Marshmallow
+from flask_jwt_extended import JWTManager
+from flask_bcrypt import Bcrypt
+from flask_cors import CORS
+
+db = SQLAlchemy()
+ma = Marshmallow()
+jwt = JWTManager()
+bcrypt = Bcrypt()
+cors = CORS()
+
+
+
+@jwt.token_in_blocklist_loader
+def check_if_token_revoked(jwt_header, jwt_payload):
+    from models.token_blocklist import TokenBlocklist
+
+    jti = jwt_payload["jti"]
+    token = TokenBlocklist.query.filter_by(jti=jti).first()
+
+    return token is not None
+
+
+import axios from 'axios';
+
+const apiClient = axios.create({
+  baseURL: '/api',
+  withCredentials: true, //🚀 CRITICAL: Forces browser to include cookies automatically
+  headers: {
+    'Content-Type': 'application/json'
+  },
+});
+
+// 🔄 AUTOMATIC TOKEN INTERCEPTOR RESCUE MATRIX
+// Inside your apiClient.js response interceptor:
+apiClient.interceptors.response.use(
+  (response) => response,
+  async (error) => {
+    const originalRequest = error.config;
+    
+    if (error.response?.status === 401 && !originalRequest._retry) {
+      originalRequest._retry = true;
+      try {
+        // Post request automatically passes the hidden refresh token cookie
+        await axios.post('/api/refresh', {}, { withCredentials: true });
+        return apiClient(originalRequest); // Retry original endpoint request
+      } catch (refreshError) {
+        // 🚀 IF REFRESH FAILS: Broadcast an event to let AuthContext know the session died
+        window.dispatchEvent(new Event('auth:session_expired'));
+        return Promise.reject(refreshError);
+      }
+    }
+    return Promise.reject(error);
+  }
+);
+
+export default apiClient;
+
+import React, { createContext, useState, useEffect, useContext, useCallback } from 'react';
+import apiClient from './apiClient';
+
+export const AuthContext = createContext(null);
+
+// Helper function to normalize user role to a clean, lowercase string
+const normalizeUserRole = (userData) => {
+  if (!userData) return null;
+  
+  // If role is an object like { role_name: 'admin' }, extract the string
+  const rawRole = typeof userData.role === 'object' 
+    ? userData.role?.role_name 
+    : userData.role;
+    
+  return {
+    ...userData,
+    role: rawRole ? rawRole.toLowerCase().trim() : null
+  };
+};
+
+export const AuthProvider = ({ children }) => {
+  const [user, setUser] = useState(null);
+  const [loading, setLoading] = useState(true);
+
+  const logout = useCallback(async () => {
+    try {
+      await apiClient.post('/logout');
+    } catch (err) {
+      console.error("Session logout cleanup error:", err);
+    } finally {
+      setUser(null);
+      localStorage.removeItem('user');
+      localStorage.removeItem('user_role');
+    }
+  }, []);
+
+  // Initial Boot: Verify the cookie session with the backend
+  useEffect(() => {
+    const initializeAuth = async () => {
+      const savedUser = localStorage.getItem('user');
+      
+      if (savedUser) {
+        try {
+          setUser(JSON.parse(savedUser));
+          
+          // Fast backend ping to ensure session is valid
+          const response = await apiClient.get('/me'); 
+          console.log("ME RESPONSE:", response.data);
+          // 🚀 FIX: Normalize the backend user data before setting state
+          const normalized = normalizeUserRole(response.data.user);
+          console.log("NORMALIZED USER:", normalized);
+          setUser(normalized);
+          localStorage.setItem('user', JSON.stringify(normalized));
+          if (normalized?.role) {
+            localStorage.setItem('user_role', normalized.role);
+          }
+        } catch (err) {
+          console.error("Session verification failed. Clearing state.");
+          setUser(null);
+          localStorage.removeItem('user');
+          localStorage.removeItem('user_role');
+        }
+      }
+      setLoading(false);
+    };
+
+    initializeAuth();
+  }, []);
+
+  useEffect(() => {
+    const handleForceLogout = () => {
+      setUser(null);
+      localStorage.removeItem('user');
+      localStorage.removeItem('user_role');
+    };
+
+    window.addEventListener('auth:session_expired', handleForceLogout);
+    return () => window.removeEventListener('auth:session_expired', handleForceLogout);
+  }, []);
+
+  const login = (userData) => {
+    // 🚀 FIX: Normalize here as well to keep everything aligned
+    const normalized = normalizeUserRole(userData);
+    setUser(normalized);
+    localStorage.setItem('user', JSON.stringify(normalized));
+    if (normalized?.role) {
+      localStorage.setItem('user_role', normalized.role);
+    }
+  };
+
+  const isAuthenticated = !!user;
+
+  return (
+    <AuthContext.Provider
+      value={{
+        user,
+        isAuthenticated,
+        login,
+        logout,
+        loading,
+      }}
+    >
+      {children}
+    </AuthContext.Provider>
+  );
+};
+
+export const useAuth = () => useContext(AuthContext);
+
+//src/api/dashoard.js
+
+
+export const getOverview = async() =>{
+    const res = await fetch('/api/dashboard/overview', {withCredentials: true});
+    if (!res.ok) throw new Error('Failed to fetch overview');
+    return res.json();
+
+};
+
+export const getTrending = async() =>{
+    const res = await fetch('/api/dashboard/analytics/trending');
+    return res.json();
+};
+
+export const getGaps = async()=>{
+    const res = await fetch('/api/dashboard/security/audits');
+    return res.json();
+};
+
+export const searchDashoard = async (query)=>{
+    const res= await fetch(`/api/dashboard/search?q=${query}`);
+    return res.json();
+};
+
+
+# server/services/decoration.py
+
+from functools import wraps
+from flask_jwt_extended import verify_jwt_in_request, get_jwt_identity
+from models import User
+
+def role_required(*allowed_roles):
+    def wrapper(fn):
+        @wraps(fn)
+        def decorator(*args, **kwargs):
+            # ensure JWT is valid
+            verify_jwt_in_request()
+
+            user_id = get_jwt_identity()
+            user = User.query.get(user_id)
+
+            if not user:
+                return {"message": "User not found"}, 404
+
+            if not user.is_active:
+                return {"message": "User account is inactive"}, 403
+
+            user_role = user.role.role_name.lower()
+
+            if user_role not in [role.lower() for role in allowed_roles]:
+                return {"message": "Access Forbidden: insufficient permissions"}, 403
+
+            return fn(*args, **kwargs)
+
+        return decorator
+    return wrapper
+
+import React, { useState } from 'react';
+import { useNavigate, Link } from 'react-router-dom'; 
+import { GraduationCap, Mail, Lock, ArrowRight, Eye, EyeOff } from 'lucide-react';
+import useAuth from '../hooks/useAuth';
+
+export default function LoginForm() {
+  const navigate = useNavigate(); 
+  const { login } = useAuth(); 
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState(''); 
+
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    setLoading(true);
+    setError('');
+    
+    const loginPayload = { 
+      email: email.toLowerCase().trim(), 
+      password 
+    };
+    
+    try {
+      const response = await fetch('/api/login', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(loginPayload),
+      });
+
+      const data = await response.json();
+      console.log("🚀 AUTH RESPONSE DATA:", data);
+
+      if (!response.ok) {
+        throw new Error(data.message || 'Invalid email or password combination.');
+      }
+
+      // 🚀 1. Process and save the user to the shared authentication state
+      login(data.user);
+      console.log("LOGIN USER:", data.user);
+
+      // 🚀 2. Send the user to the base dashboard path. 
+      // The DashboardDispatcher will automatically pick up the role and sort them into the right split deck!
+      navigate('/dashboard', { replace: true });
+          
+    } catch (err) {
+      console.error("Authentication Error:", err.message);
+      setError(err.message);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <div className="min-h-screen grid grid-cols-1 lg:grid-cols-12 bg-white">
+      {/* LEFT COLUMN: Branding Side */}
+      <div className="hidden lg:flex lg:col-span-5 bg-gradient-to-br from-emerald-800 to-teal-950 p-12 flex-col justify-between text-white relative overflow-hidden">
+        <div className="absolute inset-0 bg-[radial-gradient(circle_at_top_right,rgba(245,158,11,0.15),transparent_50%)]" />
+        
+        <Link to="/" className="flex items-center space-x-2 relative z-10">
+          <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-white/10 backdrop-blur-md text-amber-400">
+            <GraduationCap className="h-6 w-6" />
+          </div>
+          <span className="text-xl font-bold tracking-tight">Academa.</span>
+        </Link>
+
+        <div className="space-y-4 relative z-10">
+          <h2 className="text-3xl font-extrabold leading-tight">Welcome Back to Your Knowledge Hub.</h2>
+          <p className="text-emerald-100/80 leading-relaxed text-sm">
+            Log in to pick up right where you left off. Access fresh class notes, view assignments, and download updated revision materials instantly.
+          </p>
+        </div>
+
+        <p className="text-xs text-emerald-200/50 relative z-10">© 2026 Academa School System. Secure Portal.</p>
+      </div>
+
+      {/* RIGHT COLUMN: Interactive Login Form */}
+      <div className="col-span-1 lg:col-span-7 flex items-center justify-center p-8 sm:p-12 md:p-16 bg-slate-50/50">
+        <div className="w-full max-w-md space-y-8 bg-white p-8 rounded-2xl border border-slate-200/60 shadow-xl shadow-slate-100/50">
+          
+          {/* Header */}
+          <div className="space-y-2">
+            <h1 className="text-2xl font-bold tracking-tight text-slate-900">Sign in to Academa</h1>
+            <p className="text-sm text-slate-500">
+              New to the platform?{' '}
+              <Link to="/register" className="font-semibold text-emerald-600 hover:text-emerald-700 hover:underline transition-colors">
+                Create an account
+              </Link>
+            </p>
+          </div>
+
+          {/* Form */}
+          <form onSubmit={handleSubmit} className="space-y-5">
+            
+            {error && (
+              <div className="rounded-xl bg-red-50 border border-red-200/60 p-3 text-xs font-semibold text-red-600 animate-fade-in">
+                ⚠️ {error}
+              </div>
+            )}
+
+            {/* Email Field */}
+            <div className="space-y-1.5">
+              <label className="text-xs font-semibold text-slate-700 tracking-wide uppercase">Email Address</label>
+              <div className="relative group">
+                <div className="absolute inset-y-0 left-0 flex items-center pl-3.5 pointer-events-none text-slate-400 group-focus-within:text-emerald-600 transition-colors">
+                  <Mail className="h-4 w-4" />
+                </div>
+                <input
+                  type="email"
+                  required
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                  className="w-full pl-10 pr-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-sm placeholder-slate-400 focus:outline-none focus:border-emerald-500 focus:bg-white focus:ring-4 focus:ring-emerald-500/10 transition-all text-slate-800"
+                  placeholder="name@school.com"
+                />
+              </div>
+            </div>
+
+            {/* Password Field */}
+            <div className="space-y-1.5">
+              <div className="flex items-center justify-between">
+                <label className="text-xs font-semibold text-slate-700 tracking-wide uppercase">Password</label>
+                <a href="#forgot" className="text-xs font-medium text-emerald-600 hover:underline">Forgot password?</a>
+              </div>
+              <div className="relative group">
+                <div className="absolute inset-y-0 left-0 flex items-center pl-3.5 pointer-events-none text-slate-400 group-focus-within:text-emerald-600 transition-colors">
+                  <Lock className="h-4 w-4" />
+                </div>
+                <input
+                  type={showPassword ? "text" : "password"}
+                  required
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  className="w-full pl-10 pr-10 py-3 bg-slate-50 border border-slate-200 rounded-xl text-sm placeholder-slate-400 focus:outline-none focus:border-emerald-500 focus:bg-white focus:ring-4 focus:ring-emerald-500/10 transition-all text-slate-800"
+                  placeholder="••••••••"
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowPassword(!showPassword)}
+                  className="absolute inset-y-0 right-0 flex items-center pr-3 text-slate-400 hover:text-slate-600"
+                >
+                  {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                </button>
+              </div>
+            </div>
+
+            {/* Submit Button */}
+            <button
+              type="submit"
+              disabled={loading}
+              className="w-full flex items-center justify-center space-x-2 rounded-xl bg-emerald-600 px-4 py-3.5 text-sm font-semibold text-white shadow-md shadow-emerald-600/10 hover:bg-emerald-700 hover:shadow-emerald-700/20 active:scale-98 transition-all disabled:opacity-50 disabled:pointer-events-none mt-2"
+            >
+              <span>{loading ? 'Verifying Credentials...' : 'Sign In'}</span>
+              {!loading && <ArrowRight className="h-4 w-4 text-amber-400" />}
+            </button>
+          </form>
+        </div>
+      </div>
+    </div>
+  );
+}

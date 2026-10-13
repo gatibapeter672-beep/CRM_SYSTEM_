@@ -1,0 +1,94 @@
+def create_new_class_resource(teacher_id: int, form_data: dict, file_obj):
+    try:
+        class_id = int(form_data.get("class_id"))
+        subject_id = int(form_data.get("subject_id"))
+        title = form_data.get("title")
+        description = form_data.get("description", "")
+        resource_type = form_data.get("resource_type", "NOTE")
+
+        # 1. Verify authorization
+        is_assigned = db.session.scalar(
+            select(TeacherClass)
+            .where(TeacherClass.teacher_id == teacher_id)
+            .where(TeacherClass.class_id == class_id)
+            .limit(1)
+        )
+        if not is_assigned:
+            return {"error": "Access Denied: You are not authorized to deploy to this target class."}, 403
+
+        # 2. Verify subject assignment
+        class_subj = db.session.execute(
+            select(ClassSubject)
+            .where(ClassSubject.class_id == class_id)
+            .where(ClassSubject.subject_id == subject_id)
+        ).scalar_one_or_none()
+
+        if not class_subj:
+            return {"error": "Target class route does not possess an assigned course subject mapping."}, 400
+
+        # 3. Handle physical file save to disk
+        if not file_obj or file_obj.filename == '':
+            return {"error": "No valid file uploaded."}, 400
+
+        original_filename = secure_filename(file_obj.filename)
+        timestamp = int(time.time() * 1000)
+        unique_filename = f"{timestamp}_{original_filename}"
+
+        # Define destination directory: server/uploads/resources
+        upload_folder = os.path.join(current_app.root_path, 'uploads', 'resources')
+        os.makedirs(upload_folder, exist_ok=True)
+
+        # Full path to save the physical file on your server
+        file_disk_path = os.path.join(upload_folder, unique_filename)
+        file_obj.save(file_disk_path)
+
+        # Get file metadata
+        file_size = os.path.getsize(file_disk_path)
+        file_type = file_obj.mimetype or "application/octet-stream"
+        db_file_path = f"/uploads/resources/{unique_filename}"
+
+        # 4. Save metadata to Database
+        new_resource = Resource(
+            title=title,
+            description=description,
+            file_name=original_filename,
+            file_path=db_file_path,
+            file_size=file_size,
+            file_type=file_type,
+            resource_type=resource_type,
+            class_id=class_id,
+            subject_id=subject_id,
+            uploaded_by=teacher_id,
+            status='ACTIVE'
+        )
+
+        db.session.add(new_resource)
+        db.session.commit()
+        return {
+            "message": "Resource compiled and dispatched safely into class curriculum library grid.",
+            "id": new_resource.id,
+            "file_path": db_file_path
+        }, 201
+
+    except SQLAlchemyError as e:
+        db.session.rollback()
+        logger.error(f"Critical asset deployment failure executing database write: {str(e)}")
+        return {"error": "Database write transactional tracking exception thrown handling file metadata context."}, 500
+
+class FacultyPublishResource(Resource):
+    @jwt_required()
+    @role_required("teacher")
+    def post(self):
+        """
+        POST /portal/teacher/resources/publish
+        Handles multipart/form-data payload with file and text fields.
+        """
+        # Read form metadata and uploaded file
+        form_data = request.form.to_dict()
+        file_obj = request.files.get("file")
+
+        if not file_obj:
+            return {"error": "Missing uploaded file in request payload context."}, 400
+
+        teacher_id = get_jwt_identity()
+        return create_new_class_resource(teacher_id, form_data, file_obj)

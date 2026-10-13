@@ -1,0 +1,749 @@
+# models/class_model.py
+
+from extensions import db
+from sqlalchemy_serializer import SerializerMixin
+
+
+class SchoolClass(db.Model, SerializerMixin):
+    __tablename__ = "classes"
+
+    id = db.Column(db.Integer, primary_key=True)
+    
+
+    class_name = db.Column(
+        db.String(100),
+        nullable=False,
+        unique=True
+    )
+
+    description = db.Column(db.Text)
+
+    resources = db.relationship(
+        "Resource",
+        back_populates="school_class",
+        cascade="all, delete-orphan"
+
+    )
+
+    class_subjects = db.relationship(
+        "ClassSubject",
+        back_populates="school_class",
+        cascade="all, delete-orphan"
+    )
+    student_classes = db.relationship(
+    "StudentClass",
+    back_populates="school_class",
+    cascade="all, delete-orphan"
+    )
+
+    # Add the teacher_classes relationship here
+    teacher_classes = db.relationship(
+        "TeacherClass",
+        back_populates="school_class",
+        cascade="all, delete-orphan"
+    )
+
+
+    serialize_rules = (
+    '-teacher_classes.school_class',
+    '-resources.school_class',
+    '-class_subjects.school_class',
+    '-student_classes.school_class'
+    )
+
+    def __repr__(self):
+        return f"<SchoolClass {self.class_name}>"
+
+
+# models/class_subject.py
+
+from extensions import db
+from sqlalchemy_serializer import SerializerMixin
+
+
+class ClassSubject(db.Model, SerializerMixin):
+    __tablename__ = "class_subjects"
+    __table_args__ = (
+        db.UniqueConstraint(
+            'class_id',
+            'subject_id',
+            name='uq_class_subject'
+        ),
+    )
+
+    id = db.Column(db.Integer, primary_key=True)
+
+    class_id = db.Column(
+        db.Integer,
+        db.ForeignKey('classes.id'),
+        nullable=False
+    )
+
+    subject_id = db.Column(
+        db.Integer,
+        db.ForeignKey('subjects.id'),
+        nullable=False
+    )
+
+    school_class = db.relationship(
+        "SchoolClass",
+        back_populates="class_subjects"
+    )
+
+    subject = db.relationship(
+        "Subject",
+        back_populates="class_subjects"
+    )
+
+    serialize_rules = (
+    '-school_class.class_subjects',
+    '-subject.class_subjects'
+    )
+
+    
+    def __repr__(self):
+        return f"<ClassSubject class_id={self.class_id} subject_id={self.subject_id}>"
+
+# models/download.py
+
+from extensions import db
+from sqlalchemy_serializer import SerializerMixin
+from datetime import datetime, timezone
+
+
+class Download(db.Model, SerializerMixin):
+    __tablename__ = "downloads"
+
+    id = db.Column(db.Integer, primary_key=True)
+
+    user_id = db.Column(
+        db.Integer,
+        db.ForeignKey('users.id'),
+        nullable=False
+    )
+
+    resource_id = db.Column(
+        db.Integer,
+        db.ForeignKey('resources.id'),
+        nullable=False
+    )
+
+    downloaded_at = db.Column(
+        db.DateTime,
+        default=lambda: datetime.now(timezone.utc)
+    )
+
+    user = db.relationship(
+        "User",
+        back_populates="downloads"
+    )
+
+    resource = db.relationship(
+        "Resource",
+        back_populates="downloads"
+    )
+
+    serialize_rules = (
+    '-user.downloads',
+    '-resource.downloads'
+    )
+
+    def __repr__(self):
+        return f"<Download user_id={self.user_id} resource_id={self.resource_id}>"
+
+# models/resource_tag.py
+
+from extensions import db
+from sqlalchemy_serializer import SerializerMixin
+
+
+class ResourceTag(db.Model, SerializerMixin):
+    __tablename__ = "resource_tags"
+    __table_args__ = (
+        db.UniqueConstraint(
+            'resource_id',
+            'tag_id',
+            name='uq_resource_tag'
+         ),
+    )
+
+    id = db.Column(db.Integer, primary_key=True)
+
+    resource_id = db.Column(
+        db.Integer,
+        db.ForeignKey('resources.id'),
+        nullable=False
+    )
+
+    tag_id = db.Column(
+        db.Integer,
+        db.ForeignKey('tags.id'),
+        nullable=False
+    )
+
+    resource = db.relationship(
+        "Resource",
+        back_populates="resource_tags"
+    )
+    
+
+    tag = db.relationship(
+        "Tag",
+        back_populates="resource_tags"
+    )
+
+    serialize_rules = (
+    '-resource.resource_tags',
+    '-tag.resource_tags'
+    )
+
+
+    def __repr__(self):
+        return f"<ResourceTag resource_id={self.resource_id} tag_id={self.tag_id}>"
+
+# models/resource_view.py
+
+from extensions import db
+from sqlalchemy_serializer import SerializerMixin
+from datetime import datetime, timezone
+
+
+class ResourceView(db.Model, SerializerMixin):
+    __tablename__ = "resource_views"
+
+    id = db.Column(
+        db.Integer,
+        primary_key=True
+    )
+
+    user_id = db.Column(
+        db.Integer,
+        db.ForeignKey('users.id'),
+        nullable=False
+    )
+
+    resource_id = db.Column(
+        db.Integer,
+        db.ForeignKey('resources.id'),
+        nullable=False
+    )
+
+    viewed_at = db.Column(
+        db.DateTime,
+        default=lambda: datetime.now(timezone.utc)
+    )
+
+    user = db.relationship(
+        "User",
+        back_populates="resource_views"
+    )
+
+    resource = db.relationship(
+        "Resource",
+        back_populates="resource_views"
+    )
+
+    serialize_rules = (
+        '-user.resource_views',
+        '-resource.resource_views'
+    )
+    
+
+    def __repr__(self):
+        return (
+            f"<ResourceView "
+            f"user_id={self.user_id} "
+            f"resource_id={self.resource_id}>"
+        )
+# models/resource.py
+
+from extensions import db
+from sqlalchemy_serializer import SerializerMixin
+from datetime import datetime, timezone
+
+
+class Resource(db.Model, SerializerMixin):
+    __tablename__ = "resources"
+
+    id = db.Column(db.Integer, primary_key=True)
+
+    title = db.Column(
+        db.String(255),
+        nullable=False
+    )
+
+    description = db.Column(db.Text)
+
+    file_name = db.Column(
+        db.String(255),
+        nullable=False
+    )
+
+    file_path = db.Column(
+        db.Text,
+        nullable=False
+    )
+
+    file_size = db.Column(db.BigInteger)
+
+    file_type = db.Column(
+        db.String(50)
+    )
+
+    resource_type = db.Column(
+        db.Enum(
+            'NOTE',
+            'REVISION_QUESTION',
+            'PAST_PAPER',
+            'ASSIGNMENT',
+            name='resource_types'
+        )
+    )
+
+    status = db.Column(
+        db.Enum(
+            'ACTIVE',
+            'ARCHIVED',
+            'DELETED',
+            name='resource_status'
+        ),
+        default='ACTIVE'
+    )
+
+    subject_id = db.Column(
+        db.Integer,
+        db.ForeignKey('subjects.id'),
+        nullable=False
+    )
+
+    class_id = db.Column(
+        db.Integer,
+        db.ForeignKey('classes.id'),
+        nullable=False
+    )
+
+    uploaded_by = db.Column(
+        db.Integer,
+        db.ForeignKey('users.id'),
+        nullable=False
+    )
+
+    created_at = db.Column(
+        db.DateTime,
+        default=lambda: datetime.now(timezone.utc)
+    )
+
+    updated_at = db.Column(
+        db.DateTime,
+        default=lambda: datetime.now(timezone.utc),
+        onupdate=lambda: datetime.now(timezone.utc)
+    )
+
+    subject = db.relationship(
+        "Subject",
+        back_populates="resources"
+    )
+
+    school_class = db.relationship(
+        "SchoolClass",
+        back_populates="resources"
+    )
+    
+
+    uploader = db.relationship(
+        "User",
+        back_populates="uploaded_resources"
+    )
+    
+
+    downloads = db.relationship(
+        "Download",
+        back_populates="resource",
+        cascade="all, delete-orphan"
+    )
+    
+
+    resource_tags = db.relationship(
+        "ResourceTag",
+        back_populates="resource",
+        cascade="all, delete-orphan"
+    )
+
+    resource_views = db.relationship(
+    "ResourceView",
+    back_populates="resource",
+    cascade="all, delete-orphan"
+)
+    
+
+    serialize_rules = (
+    '-subject.resources',
+    '-school_class.resources',
+    '-uploader.uploaded_resources',
+    '-downloads.resource',
+    '-resource_tags.resource',
+    '-resource_views.resource'
+    )
+
+    def __repr__(self):
+        return f"<Resource {self.title}>"
+# models/role.py
+
+from extensions import db
+from sqlalchemy_serializer import SerializerMixin
+from datetime import datetime, timezone
+
+
+class Role(db.Model, SerializerMixin):
+    __tablename__ = "roles"
+
+    id = db.Column(db.Integer, primary_key=True)
+
+    role_name = db.Column(db.String(50),unique=True,nullable=False)
+
+    description = db.Column(db.Text)
+
+    created_at = db.Column(db.DateTime,default=lambda: datetime.now(timezone.utc)    )
+
+    users = db.relationship(
+        "User",
+        back_populates="role"
+    )
+
+    serialize_rules = (
+        '-users.role',
+    )
+
+    
+
+    def __repr__(self):
+        return f"<Role {self.role_name}>"
+
+# models/subject.py
+
+from extensions import db
+from sqlalchemy_serializer import SerializerMixin
+
+
+class Subject(db.Model, SerializerMixin):
+    __tablename__ = "subjects"
+
+    id = db.Column(db.Integer, primary_key=True)
+
+    subject_name = db.Column(
+        db.String(100),
+        unique=True,
+        nullable=False
+    )
+
+    subject_code = db.Column(
+        db.String(20),
+        unique=True
+    )
+
+    description = db.Column(db.Text)
+
+    resources = db.relationship(
+        "Resource",
+        back_populates="subject",
+        cascade="all, delete-orphan"
+    )
+
+    class_subjects = db.relationship(
+        "ClassSubject",
+        back_populates="subject",
+        cascade="all, delete-orphan"
+    )
+
+    serialize_rules = (
+    '-resources.subject',
+    '-class_subjects.subject'
+    )
+
+    def __repr__(self):
+        return f"<Subject {self.subject_name}>"
+
+# models/tag.py
+
+from extensions import db
+from sqlalchemy_serializer import SerializerMixin
+
+
+class Tag(db.Model, SerializerMixin):
+    __tablename__ = "tags"
+
+    id = db.Column(db.Integer, primary_key=True)
+
+    tag_name = db.Column(
+        db.String(100),
+        unique=True,
+        nullable=False
+    )
+
+    resource_tags = db.relationship(
+        "ResourceTag",
+        back_populates="tag",
+        cascade="all, delete-orphan"
+    )
+
+    serialize_rules = (
+    '-resource_tags.tag',
+    )
+
+    def __repr__(self):
+        return f"<Tag tag_name={self.tag_name} >"
+# models/token_blocklist.py
+from extensions import db
+from sqlalchemy_serializer import SerializerMixin
+from datetime import datetime, timezone
+
+class TokenBlocklist(db.Model):
+    __tablename__ = "token_blocklist"
+
+    id = db.Column(db.Integer, primary_key=True)
+
+    jti = db.Column(
+        db.String(36),
+        nullable=False,
+        unique=True,
+        index=True
+    )
+
+    created_at = db.Column(
+        db.DateTime,
+        default=lambda: datetime.now(timezone.utc),
+        nullable=False
+    )
+
+    expires_at = db.Column(
+        db.DateTime,
+        nullable=False
+    )
+
+    def __repr__(self):
+        return f"<BlockedToken {self.jti}>"
+
+# models/user.py
+
+from extensions import db, bcrypt
+from sqlalchemy_serializer import SerializerMixin
+from sqlalchemy.ext.hybrid import hybrid_property
+from datetime import datetime, timezone
+from sqlalchemy.orm import validates
+import re
+
+
+class User(db.Model, SerializerMixin):
+    __tablename__ = "users"
+
+    id = db.Column(db.Integer, primary_key=True)
+
+    first_name = db.Column(
+        db.String(100),
+        nullable=False
+    )
+
+    last_name = db.Column(
+        db.String(100),
+        nullable=False
+    )
+
+    email = db.Column(
+        db.String(255),
+        unique=True,
+        nullable=False
+    )
+
+    _password_hash = db.Column(
+        db.String(255),
+        nullable=False
+    )
+
+    role_id = db.Column(
+        db.Integer,
+        db.ForeignKey('roles.id'),
+        nullable=False
+    )
+
+    is_active = db.Column(
+        db.Boolean,
+        default=True
+    )
+
+    last_login = db.Column(db.DateTime)
+
+    created_at = db.Column(
+        db.DateTime,
+        default=lambda: datetime.now(timezone.utc)
+    )
+
+    updated_at = db.Column(
+        db.DateTime,
+        default=lambda: datetime.now(timezone.utc),
+        onupdate=lambda: datetime.now(timezone.utc)
+    )
+
+    role = db.relationship(
+        "Role",
+        back_populates="users"
+    )
+
+    uploaded_resources = db.relationship(
+        "Resource",
+        back_populates="uploader"
+    )
+    student_classes = db.relationship(
+    "StudentClass",
+    back_populates="student",
+    cascade="all, delete-orphan"
+    )
+
+    downloads = db.relationship(
+        "Download",
+        back_populates="user",
+        cascade="all, delete-orphan"
+    )
+    resource_views = db.relationship(
+    "ResourceView",
+    back_populates="user",
+    cascade="all, delete-orphan"
+)
+    # Add the teacher_classes relationship here
+    teacher_classes = db.relationship(
+        "TeacherClass",
+        back_populates="teacher",
+        cascade="all, delete-orphan"
+    )
+
+
+
+    serialize_rules = (
+    '-teacher_classes.teacher',
+    '-_password_hash',
+    '-role.users',
+    '-student_classes.student',
+    '-downloads.user',
+    '-resource_views.user',
+    '-uploaded_resources.uploader'
+    )
+
+    #password handling property
+
+    @hybrid_property
+    def password(self):
+        raise AttributeError("Password is not readable")
+    
+
+
+    @password.setter
+    def password(self, plain_password):
+        self._password_hash =bcrypt.generate_password_hash(plain_password).decode('utf-8')
+
+
+    def check_password(self, plain_password):
+        return bcrypt.check_password_hash(self._password_hash, plain_password)
+
+    @validates('email')
+    def validate_email(self,key,email):
+        email = email.lower()
+        if not re.match(r"[^@]+@[^@]+\.[^@]+", email):
+            raise ValueError('invalid email format')
+        return email
+    
+
+    
+
+    def __repr__(self):
+        return f"<User {self.email}>"
+
+
+#oooh out of the models we had we had to add a new model recent
+# server/models/student_class.py
+from extensions import db
+from sqlalchemy_serializer import SerializerMixin
+
+
+
+class StudentClass(db.Model, SerializerMixin):
+    __tablename__ = "student_classes"
+
+    id = db.Column(db.Integer, primary_key=True)
+
+    student_id = db.Column(
+        db.Integer,
+        db.ForeignKey('users.id'),
+        nullable=False
+    )
+
+    class_id = db.Column(
+        db.Integer,
+        db.ForeignKey('classes.id'),
+        nullable=False
+    )
+
+    # relationships
+    student = db.relationship(
+        "User",
+        back_populates="student_classes"
+    )
+
+    school_class = db.relationship(
+        "SchoolClass",
+        back_populates="student_classes"
+    )
+
+    __table_args__ = (
+        db.UniqueConstraint('student_id', 'class_id', name='uq_student_class'),
+    )
+
+    serialize_rules = (
+        '-student.student_classes',
+        '-school_class.student_classes',
+    )
+
+
+#recenntly added 
+# server/models/teacher_class.py
+from extensions import db
+from sqlalchemy_serializer import SerializerMixin
+
+class TeacherClass(db.Model, SerializerMixin):
+    __tablename__ = "teacher_classes"
+
+    id = db.Column(db.Integer, primary_key=True)
+
+    teacher_id = db.Column(
+        db.Integer,
+        db.ForeignKey('users.id'),
+        nullable=False
+    )
+
+    class_id = db.Column(
+        db.Integer,
+        db.ForeignKey('classes.id'),
+        nullable=False
+    )
+
+    # Relationships
+    teacher = db.relationship(
+        "User", 
+        back_populates="teacher_classes"
+    )
+    
+    school_class = db.relationship(
+        "SchoolClass", 
+        back_populates="teacher_classes"
+    )
+
+    # Ensures a teacher can't be added to the exact same class twice
+    __table_args__ = (
+        db.UniqueConstraint('teacher_id', 'class_id', name='uq_teacher_class'),
+    )
+
+    serialize_rules = (
+        '-teacher.teacher_classes',
+        '-school_class.teacher_classes',
+    )
+
+    def __repr__(self):
+        return f"<TeacherClass teacher_id={self.teacher_id} class_id={self.class_id}>"
